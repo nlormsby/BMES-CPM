@@ -15,12 +15,13 @@
        LoadCell.tare();
        //place known mass
        LoadCell.refreshDataSet();
-       float newCalibrationValue = LoadCell.getNewCalibration(known_mass);
+       float newCalibrationValue = LoadCell.getNewCalibration(pain_threshold);
 */
 
 #include <HX711_ADC.h>
 #if defined(ESP8266)|| defined(ESP32) || defined(AVR)
 #include <EEPROM.h>
+#include <Wire.h>
 #endif
 
 //pins:
@@ -30,10 +31,21 @@ const int HX711_sck = 5; //mcu > HX711 sck pin
 //HX711 constructor:
 HX711_ADC LoadCell(HX711_dout, HX711_sck);
 
+'''
+Calibration vars
+'''
 const int calVal_eepromAdress = 0;
 unsigned long t = 0;
-int calVal = 0;
-float known_mass = 100;
+float pain_threshold = 100;
+
+'''
+Other Function vars
+'''
+const int AS5600_Address = 0x36; // Default I2C address for AS5600
+const float angleThreshold = 180; //To be changed
+float offsetAngle; //offset angle is used to set the initial angle to 0
+int loopIter;
+int prevAngle;
 
 
 void setup() {
@@ -42,6 +54,11 @@ void setup() {
   Serial.println("Starting...");
 
   LoadCell.begin();
+  Wire.begin();         // Initialize I2C
+
+  '''
+  Calibration setup
+  '''
   //LoadCell.setReverseOutput(); //uncomment to turn a negative output value to positive
   unsigned long stabilizingtime = 2000; // preciscion right after power-up can be improved by adding a few seconds of stabilizing time
   boolean _tare = true; //set this to false if you don't want tare to be performed in the next step
@@ -55,6 +72,15 @@ void setup() {
     Serial.println("Startup is complete");
   }
   while (!LoadCell.update());
+
+  '''
+  The other function
+  '''
+  Serial.println("Ready to detect angle of rotation.");
+  offsetAngle = readAS5600Angle();
+  loopIter = 0;
+  prevAngle = 0;
+
   calibrate(); //start calibration procedure
 }
 
@@ -72,7 +98,7 @@ void loop() {
       Serial.print("Load_cell output val: ");
       Serial.println(i);
       //TO DO-----------------------------
-      if(i >= known_mass) {//Determine the condition to where the send signal, i is the output
+      if(i >= pain_threshold) {//Determine the condition to where the send signal, i is the output
         Serial.println("Terminate");
         exit(0); //The signal, either 1 or 0
       }
@@ -95,8 +121,62 @@ void loop() {
     Serial.println("Tare complete");
   }
 
+  '''
+  other function
+  '''
+  float angle = readAS5600Angle();
+  Serial.print("Angle: ");
+  Serial.println(angle);
+  Serial.println();
+ 
+  //this if statement is used to see if patients leg angle
+  //has changed too much
+  if(loopIter == 5){
+    if(abs(prevAngle - angle) > angleThreshold){
+      Serial.println("Uh oh"); //to be changed obviously
+      delay(1000);
+    }
+    loopIter = 0;
+    prevAngle = angle;
+  }
+  loopIter++;
+  delay(100); // Delay for readability, adjust as needed for responsiveness
+
 }
 
+'''
+other function methods
+'''
+float readAS5600Angle() {
+  // Read 12-bit angle value from AS5600
+  Wire.beginTransmission(AS5600_Address);
+  Wire.write(0x0C); // Register for the high byte of the angle
+  Wire.endTransmission(false);
+  Wire.requestFrom(AS5600_Address, 2); // Request 2 bytes (high and low angle bytes)
+  while(Wire.available() < 2); // Wait for bytes
+  uint16_t highByte = Wire.read();
+  uint16_t lowByte = Wire.read();
+ 
+  uint16_t rawAngle = (highByte << 8) | lowByte; // Combine bytes
+  float angle = ((float(rawAngle)* 360.0) / 4096.0) - offsetAngle; // Convert raw value to degrees
+
+
+  /**
+  * converts the angle to be within 0 to 360 degrees
+  */
+  if(angle < 0){
+    angle = angle + 360;
+  }
+  if(angle > 360){
+    angle = angle - 360;
+  }
+  return angle;
+}
+
+
+'''
+Calibration methods
+'''
 void calibrate() {
   Serial.println("***");
   Serial.println("Start calibration:");
@@ -122,24 +202,24 @@ void calibrate() {
   Serial.println("Now, place your known mass on the loadcell.");
   Serial.println("Then send the weight of this mass (i.e. 100.0) from serial monitor.");
 
-  known_mass = 100;//use to be 0
+  pain_threshold = 100;//use to be 0
   //known_mass = Serial.parseFloat();
 
   _resume = false;
   while (_resume == false) {
     LoadCell.update();
-    if (Serial.available() > 0) {
-      known_mass = 100;
-      if (known_mass != 0) {
+    //if (Serial.available() > 0) {
+      pain_threshold = 100;
+      if (pain_threshold != 0) {
         Serial.print("Known mass is: ");
-        Serial.println(known_mass);
+        Serial.println(pain_threshold);
         _resume = true;
       }
-    }
+    //}
   }
 
   LoadCell.refreshDataSet(); //refresh the dataset to be sure that the known mass is measured correct
-  float newCalibrationValue = LoadCell.getNewCalibration(known_mass); //get the new calibration value
+  float newCalibrationValue = LoadCell.getNewCalibration(pain_threshold); //get the new calibration value
 
   Serial.print("New calibration value has been set to: ");
   Serial.print(newCalibrationValue);
