@@ -12,7 +12,17 @@ float offsetAngle; // Offset angle is used to set the initial angle to 0
 unsigned long previousAngleDetectTime = 0;
 unsigned long angleDetectionInterval = 200; // Interval for angle detection in milliseconds
 
+// Motor controls
+unsigned long dist = 400; // How many steps we take // original 4800
+bool dir = false; // direction the motor is going (true is forward)
+unsigned long distIter = 0; // What step we are on
+unsigned long highDelay = 1600;
+unsigned long lowDelay = 2000;
+bool start = true;
+
+
 void setup() {
+  delay(2000);
   pinMode(stepPin, OUTPUT);
   pinMode(dirPin, OUTPUT);
   pinMode(enPin, OUTPUT);
@@ -25,12 +35,31 @@ void setup() {
 }
 
 void loop() {
+  if (start == true) {
+    digitalWrite(dirPin,HIGH); //Changes the direction of rotation
+    start = false;
+  }
+  // Motor change direction check
+  if (distIter >= dist) {
+    if (dir == true) {
+      delay(1000); // One second delay
+      digitalWrite(dirPin,HIGH); //Changes the direction of rotation
+    }
+    if (dir == false) {
+      delay(1000); // One second delay
+      digitalWrite(dirPin,LOW); //Changes the direction of rotation
+    }
+    dir = !dir;
+    distIter = 0;
+  }
+
   // Motor control (constant speed)
-  digitalWrite(dirPin, HIGH); // Set direction for motor rotation
+  // digitalWrite(dirPin, HIGH); // Set direction for motor rotation
   digitalWrite(stepPin, HIGH); // Step motor
-  delayMicroseconds(1600);
+  delayMicroseconds(highDelay);
   digitalWrite(stepPin, LOW);
-  delayMicroseconds(2000);
+  delayMicroseconds(lowDelay);
+  distIter++;
 
   // Angle detection
   unsigned long currentMillis = millis();
