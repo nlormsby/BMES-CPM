@@ -74,7 +74,7 @@ void loop() {
       start = false;
     }
     
-  }
+  }else{
   // Motor change direction check
   if (distIter >= dist) {
     if (dir == true) {
@@ -130,4 +130,5 @@ float readAS5600Angle() {
     angle -= 360;
   }
   return angle;
+}
 }
