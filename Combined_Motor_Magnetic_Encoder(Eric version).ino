@@ -46,25 +46,27 @@ void loop() {
         //increment leg
         //count increase +increment value(0.25?)
       //assign dist = count
-      char inByte = Serial.read();
-      if (inByte == 'w'){
-        digitalWrite(dirPin,HIGH); //move leg up
-        digitalWrite(stepPin, HIGH); // Step motor
-        delayMicroseconds(highDelay);
-        digitalWrite(stepPin, LOW);
-        delayMicroseconds(lowDelay);
-        count++;
-      }
-      if  (inByte == 's'){
-        digitalWrite(dirPin,LOW); //move leg down
-        digitalWrite(stepPin, HIGH); // Step motor
-        delayMicroseconds(highDelay);
-        digitalWrite(stepPin, LOW);
-        delayMicroseconds(lowDelay);
-        count--;
-      }
-      if(inByte == 'd'){
-        startUp = false;
+      if (Serial.available() > 0) {
+        char inByte = Serial.read();
+        if (inByte == 'w'){
+          digitalWrite(dirPin,HIGH); //move leg up
+          digitalWrite(stepPin, HIGH); // Step motor
+          delayMicroseconds(highDelay);
+          digitalWrite(stepPin, LOW);
+          delayMicroseconds(lowDelay);
+          count++;
+        }
+        else if  (inByte == 's'){
+          digitalWrite(dirPin,LOW); //move leg down
+          digitalWrite(stepPin, HIGH); // Step motor
+          delayMicroseconds(highDelay);
+          digitalWrite(stepPin, LOW);
+          delayMicroseconds(lowDelay);
+          count--;
+        }
+        else if(inByte == 'd'){
+          startUp = false;
+        }
       }
     //
     if(startUp == false){
