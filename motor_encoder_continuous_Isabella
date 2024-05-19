@@ -25,7 +25,7 @@ void setup() {
   pinMode(enPin, OUTPUT);
   digitalWrite(enPin, LOW);
 
-  Serial.println("Ready for direction input (f or stop).");
+  Serial.println("Ready for direction input (f, r, b, stop).");
 }
 
 void loop() {
@@ -49,6 +49,7 @@ void loop() {
     else if (input == "stop") { // Stop the motor
       Serial.println("Motor stopped.");
       motorRunning = false;
+      magneticEncoderOn = false;
     }
     if (input == "b") { //begin - initialize Magnetic Encoder
       initializeMagneticEncoder();
