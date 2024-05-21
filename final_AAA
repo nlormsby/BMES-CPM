@@ -1,0 +1,194 @@
+/* We've changed it so that count is no longer unsigned so that count-- doesn't give a ridiculously large number. Additionally, we've swapped the high and low for the dirPin --> this fixed the issue wherethe motor would do two revolutions instead of one for the first run through
+*/
+#include <Wire.h>
+#include <Stepper.h>
+
+// Motor pins
+const int stepPin = 5;
+const int dirPin = 2;
+const int enPin = 8;
+
+
+
+// Constants for AS5600
+const int AS5600_Address = 0x36; // Default I2C address for AS5600
+float offsetAngle = 0; // Offset angle is used to set the initial angle to 0
+float finalAngle;
+
+unsigned long previousAngleDetectTime = 0;
+unsigned long angleDetectionInterval = 200; // Interval for angle detection in milliseconds
+
+// Motor controls
+unsigned long dist = 400; // How many steps we take // original 4800
+bool dir = true; // direction the motor is going (true is forward)
+unsigned long distIter = 0; // What step we are on
+unsigned long highDelay = 1600;
+unsigned long lowDelay = 2000;
+unsigned long highestDelay = 5000;  //should be 20% slower than normal
+bool start = true;
+bool startUp = true;
+long count = 0;
+
+Stepper myStepper(dist, 2, 3, 4, 5); // Change pins as necessary
+
+
+void setup() {
+  delay(2000);
+  pinMode(stepPin, OUTPUT);
+  pinMode(dirPin, OUTPUT);
+  pinMode(enPin, OUTPUT);
+  digitalWrite(enPin, LOW);
+  
+  Serial.begin(9600);   // Start the serial communication
+  Wire.begin();         // Initialize I2C
+  Serial.println("Ready to detect angle of rotation.");
+  offsetAngle = readAS5600Angle();
+  Serial.println(offsetAngle);
+  //Serial.println("H");
+  // Set the speed of the stepper motor (RPM)
+  myStepper.setSpeed(60);
+  //Serial.println("speed");
+}
+
+void loop() {
+  //Serial.println("Loop started");
+  if (start == true) {
+    //Serial.println("entered main loop");
+    if (Serial.available() > 0) {
+      String input = Serial.readStringUntil('\n'); // Read input until newline
+
+      if (input == "flexion" || input == "f") { // Flexion towards patient's abdomen
+        Serial.println("Moving forward");
+        digitalWrite(dirPin,HIGH); //move leg up
+        for (int i = 0; i < dist; i++) {
+          digitalWrite(stepPin, HIGH); // Step motor
+          delayMicroseconds(highDelay);
+          digitalWrite(stepPin, LOW);
+          delayMicroseconds(lowDelay);
+          count++;
+        }
+      }
+      //digitalWrite(dirPin, HIGH);
+      //dir = true;
+      //stop = false; 
+      //Serial.println("2nd if");
+      if (input == "extension" || input == "r") { // Extension outwards
+        Serial.println("Moving backward");
+        digitalWrite(dirPin,LOW); //move leg up
+        for (int i = 0; i < dist; i++) {
+          digitalWrite(stepPin, HIGH); // Step motor
+          delayMicroseconds(highDelay);
+          digitalWrite(stepPin, LOW);
+          delayMicroseconds(lowDelay);
+          count--;
+        }
+      } 
+      if (input == "halt") { // Stop the rotation of the stepper motor
+        // No operation, the stepper motor will just stop receiving steps
+        Serial.println("Halted");
+      }
+      if (input == "stop"|| input == "s") {
+        Serial.println("starts PT");
+        start = false;
+        float finalAngle = readAS5600Angle();
+        Serial.println(finalAngle);
+        //Serial.println(count);
+        if (count < 0) {
+          dir = !dir;
+          count = count * (-1);
+          digitalWrite(dirPin,LOW);
+        }
+        delay(2000);
+      }
+      /**
+      if (input == "false") { // Turn on the magnetic encoder
+        start = false; 
+        Serial.println("Magnetic encoder turned on");
+        delay(2000);
+      }
+      */
+    }
+  }
+  else {
+    //if (Serial.available() > 0) {
+      //exit(1);
+    //}
+    //Serial.println("Entered else");
+    // Motor change direction check
+   if (distIter >= count) {
+      if (dir == true) {
+        delay(1000); // One second delay
+        digitalWrite(dirPin,LOW); //Changes the direction of rotation
+      }
+      if (dir == false) {
+        delay(1000); // One second delay
+        digitalWrite(dirPin,HIGH); //Changes the direction of rotation
+     }
+      dir = !dir;
+      distIter = 0;
+    }
+
+    // Motor control (constant speed)
+    // digitalWrite(dirPin, HIGH); // Set direction for motor rotation
+    //Serial.println("Got to movement");
+    if(readAS5600Angle() > 10 && readAS5600Angle() < 30){
+      //Serial.println("Got to movement 1");
+      digitalWrite(stepPin, HIGH); // Step motor
+      delayMicroseconds(highestDelay);
+      digitalWrite(stepPin, LOW);
+      delayMicroseconds(lowDelay);
+      //Serial.println("slow 1");
+    }
+    if (readAS5600Angle() > finalAngle - 10 && readAS5600Angle() < finalAngle - 30){
+      //Serial.println("Got to movement 1");
+      digitalWrite(stepPin, HIGH); // Step motor
+      delayMicroseconds(highestDelay);
+      digitalWrite(stepPin, LOW);
+      delayMicroseconds(lowDelay);
+      //Serial.println("slow 2");
+    }
+    else{
+      //Serial.println("Got to movement 2");
+      digitalWrite(stepPin, HIGH); // Step motor
+      delayMicroseconds(highDelay);
+      digitalWrite(stepPin, LOW);
+      delayMicroseconds(lowDelay);
+     //Serial.println("move");
+    }
+    distIter++;
+
+    // Angle detection
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousAngleDetectTime >= angleDetectionInterval) {
+      previousAngleDetectTime = currentMillis;
+      float angle = readAS5600Angle();
+      Serial.print("Angle: ");
+      Serial.println(angle);
+    }
+  }
+}
+
+float readAS5600Angle() {
+  // Read 12-bit angle value from AS5600
+  Wire.beginTransmission(AS5600_Address);
+  Wire.write(0x0C); // Register for the high byte of the angle
+  Wire.endTransmission(false);
+  Wire.requestFrom(AS5600_Address, 2); // Request 2 bytes (high and low angle bytes)
+  while(Wire.available() < 2); // Wait for bytes
+  uint16_t highByte = Wire.read();
+  uint16_t lowByte = Wire.read();
+ 
+  uint16_t rawAngle = (highByte << 8) | lowByte; // Combine bytes
+  float angle = ((float(rawAngle) * 360.0) / 4096.0) - offsetAngle; // Convert raw value to degrees
+
+  /**
+  * Convert the angle to be within 0 to 360 degrees
+  */
+  if(angle < 0){
+    angle += 360;
+  }
+  if(angle > 360){
+    angle -= 360;
+  }
+  return angle;
+}
